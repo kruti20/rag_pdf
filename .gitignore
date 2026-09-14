@@ -5,3 +5,5 @@ __pycache__/
 *.pyc
 storage/chroma_db/
 .pytest_cache/
+.worktrees/
+.superpowers/
