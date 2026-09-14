@@ -1,0 +1,10 @@
+streamlit
+pymupdf
+python-docx
+chardet
+torch==2.5.1
+sentence-transformers
+chromadb
+groq
+langchain-text-splitters
+python-dotenv

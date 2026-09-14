@@ -1,0 +1,62 @@
+AI PDF Document Assistant - How to Run
+========================================
+
+1. Python version
+   Use Python 3.11 (not 3.14 - newer versions lack prebuilt wheels for some ML
+   dependencies like torch/chromadb/sentence-transformers).
+
+2. Create and activate a virtual environment
+   python -m venv venv
+
+   Windows (git-bash):
+   source venv/Scripts/activate
+
+   Windows (PowerShell):
+   venv\Scripts\Activate.ps1
+
+3. Install dependencies
+   pip install -r requirements.txt
+
+   If `import torch` fails with:
+     OSError: ... shm.dll or one of its dependencies
+   the pulled-in torch build is broken for your setup - reinstall the pinned CPU build:
+     pip uninstall -y torch
+     pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+
+4. Get a free Groq API key
+   - Sign up at https://console.groq.com
+   - Create an API key
+   - Copy .env.example to .env and set:
+       GROQ_API_KEY=your_key_here
+
+   Note: Groq's free-tier model lineup changes over time. The app currently uses
+   openai/gpt-oss-120b (core/llm.py). If it ever 404s, check console.groq.com
+   (or client.models.list()) for current model names.
+
+5. Run the app
+   streamlit run app.py
+
+   Then open the URL Streamlit prints (usually http://localhost:8501) in your browser.
+   First run is slow (~30-45s) while it imports torch/transformers/chromadb - this is
+   normal, not a crash.
+
+6. Use the app
+   - Upload a PDF, DOCX, or TXT file (max 20MB; legacy .doc is rejected - save as .docx)
+   - Wait for "indexed - N chunks" to appear
+   - Ask a question in the chat box, or click one of the suggested questions
+   - Answers are grounded in the document and cited by page/paragraph/line
+
+Running tests
+-------------
+   pip install -r requirements-dev.txt
+   pytest tests/
+
+Known limitations (MVP)
+------------------------
+- No OCR - scanned/image-only PDFs will show a warning, not extracted text
+- Legacy .doc files are rejected - save as .docx first
+- Files over 20MB are rejected
+- Single-document sessions only (no cross-document Q&A)
+- Chat history is session-scoped only (not persisted across restarts)
+- Groq free-tier rate limits apply - the app retries with backoff internally, and shows
+  a friendly message if retries are exhausted
