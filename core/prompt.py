@@ -9,15 +9,21 @@ SYSTEM_INSTRUCTIONS = (
 )
 
 
-def _format_chunk(chunk: dict) -> str:
-    return f"[{chunk['location_label']}] {chunk['text']}"
+def _format_chunk(chunk: dict, document_names: dict[str, str]) -> str:
+    name = document_names.get(chunk.get("document_id"))
+    label = f"{name} — {chunk['location_label']}" if name else chunk["location_label"]
+    return f"[{label}] {chunk['text']}"
 
 
 def build_prompt(
-    question: str, chunks: list[dict], chat_history: list[tuple[str, str]] | None = None
+    question: str,
+    chunks: list[dict],
+    document_names: dict[str, str] | None = None,
+    chat_history: list[tuple[str, str]] | None = None,
 ) -> str:
+    document_names = document_names or {}
     context = (
-        "\n\n".join(_format_chunk(c) for c in chunks)
+        "\n\n".join(_format_chunk(c, document_names) for c in chunks)
         if chunks
         else "(no relevant context found in the document)"
     )
