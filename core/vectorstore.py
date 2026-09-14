@@ -12,6 +12,9 @@ class VectorStore:
     def _collection(self, document_id: str):
         return self.client.get_or_create_collection(name=f"doc_{document_id}")
 
+    def delete_document(self, document_id: str) -> None:
+        self.client.delete_collection(name=f"doc_{document_id}")
+
     def add_chunks(self, chunks: list[Chunk]) -> None:
         if not chunks:
             return
