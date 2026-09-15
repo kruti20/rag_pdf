@@ -136,14 +136,14 @@ with right:
         with st.chat_message("assistant"):
             st.markdown("Which document would you like to summarize?")
             library = list(st.session_state.documents.items())
-            choice_name = st.radio(
+            chosen_id = st.radio(
                 "Choose a document",
-                options=[meta["name"] for _, meta in library],
+                options=[doc_id for doc_id, _ in library],
+                format_func=lambda doc_id: st.session_state.documents[doc_id]["name"],
                 key="summarize-choice",
                 label_visibility="collapsed",
             )
             if st.button("Summarize", key="summarize-confirm"):
-                chosen_id = next(doc_id for doc_id, meta in library if meta["name"] == choice_name)
                 question = st.session_state.pending_summarize_question
                 document_names = {doc_id: meta["name"] for doc_id, meta in st.session_state.documents.items()}
                 history_for_prompt = [
