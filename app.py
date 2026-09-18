@@ -59,6 +59,7 @@ with left:
     }
     st.session_state.removed_document_ids &= currently_selected_ids
 
+    overflow_file_names = []
     for uploaded_file in uploaded_files or []:
         file_bytes = uploaded_file.getvalue()
         document_id = hashlib.sha256(file_bytes).hexdigest()[:16]
@@ -70,10 +71,7 @@ with left:
             continue
 
         if len(st.session_state.documents) >= MAX_DOCUMENTS:
-            st.error(
-                f"Maximum {MAX_DOCUMENTS} documents — remove one before adding "
-                f"'{uploaded_file.name}'"
-            )
+            overflow_file_names.append(uploaded_file.name)
             continue
 
         suffix = Path(uploaded_file.name).suffix
@@ -96,6 +94,12 @@ with left:
                 "chunk_count": result.chunk_count,
                 "has_extractable_text": result.has_extractable_text,
             }
+
+    if overflow_file_names:
+        st.error(
+            f"Maximum {MAX_DOCUMENTS} documents allowed — remove one before adding: "
+            + ", ".join(f"'{name}'" for name in overflow_file_names)
+        )
 
     st.subheader(f"Documents ({len(st.session_state.documents)}/{MAX_DOCUMENTS})")
 
