@@ -78,6 +78,16 @@ def test_generic_error_produces_distinct_message_not_mentioning_rate_limit():
     assert "went wrong" in message["text"].lower()
 
 
+def test_generic_error_logs_the_real_exception_for_diagnosis(caplog):
+    def failing_answer_fn(vector_store, document_ids, question, document_names=None, chat_history=None):
+        raise RuntimeError("boom")
+
+    with caplog.at_level("ERROR"):
+        build_answer_message(None, ["doc1"], "?", answer_fn=failing_answer_fn)
+
+    assert "boom" in caplog.text
+
+
 def test_answer_fn_is_called_with_vector_store_document_ids_names_and_history():
     received = {}
 

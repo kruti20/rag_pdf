@@ -101,7 +101,7 @@ with left:
 
     for document_id, meta in list(st.session_state.documents.items()):
         with st.container(border=True):
-            st.markdown(f"📄 **{meta['name']}**")
+            st.markdown(f"**{meta['name']}**")
             size_label = SIZE_LABELS.get(meta["source_type"], "sections")
             st.caption(f"{meta['section_count']} {size_label} · {meta['source_type'].upper()}")
 

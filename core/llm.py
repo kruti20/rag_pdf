@@ -1,7 +1,9 @@
 import os
 import time
 
-from groq import Groq, RateLimitError
+from groq import APIConnectionError, Groq, InternalServerError, RateLimitError
+
+RETRYABLE_ERRORS = (RateLimitError, InternalServerError, APIConnectionError)
 
 # Groq's free-tier model lineup shifts over time (check client.models.list()
 # if these stop working). llama-3.3-70b-versatile from the original tech
@@ -36,7 +38,7 @@ class GroqLLM:
                     max_tokens=MAX_TOKENS,
                 )
                 return response.choices[0].message.content
-            except RateLimitError as e:
+            except RETRYABLE_ERRORS as e:
                 last_error = e
                 if attempt < self.max_retries - 1:
                     self.sleep_fn(self.backoff_base_seconds * (2**attempt))

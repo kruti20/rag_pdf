@@ -1,6 +1,10 @@
+import logging
+
 from groq import RateLimitError
 
 from core.answer import answer_question
+
+logger = logging.getLogger(__name__)
 
 RATE_LIMIT_MESSAGE = (
     "Hit the free-tier rate limit, retrying in a few seconds… please try again shortly."
@@ -33,6 +37,7 @@ def build_answer_message(
     except RateLimitError:
         return {"role": "assistant", "text": RATE_LIMIT_MESSAGE, "sources": [], "found_in_document": False}
     except Exception:
+        logger.exception("Answering question failed: %r", question)
         return {"role": "assistant", "text": GENERIC_ERROR_MESSAGE, "sources": [], "found_in_document": False}
 
     return {

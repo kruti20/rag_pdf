@@ -1,6 +1,6 @@
 import httpx
 import pytest
-from groq import RateLimitError
+from groq import APIConnectionError, APITimeoutError, InternalServerError, RateLimitError
 
 from core.llm import GroqLLM
 
@@ -8,6 +8,19 @@ from core.llm import GroqLLM
 def _rate_limit_error():
     response = httpx.Response(429, request=httpx.Request("POST", "https://api.groq.com/x"))
     return RateLimitError("rate limited", response=response, body=None)
+
+
+def _internal_server_error():
+    response = httpx.Response(503, request=httpx.Request("POST", "https://api.groq.com/x"))
+    return InternalServerError("service unavailable", response=response, body=None)
+
+
+def _connection_error():
+    return APIConnectionError(request=httpx.Request("POST", "https://api.groq.com/x"))
+
+
+def _timeout_error():
+    return APITimeoutError(request=httpx.Request("POST", "https://api.groq.com/x"))
 
 
 class _FakeCompletions:
@@ -67,3 +80,27 @@ def test_generate_raises_after_exhausting_retries():
         llm.generate("some prompt")
 
     assert client.completions.calls == 3
+
+
+def test_generate_retries_after_internal_server_error_then_succeeds():
+    client = _FakeClient([_internal_server_error(), _fake_success_response("recovered")])
+    llm = GroqLLM(client=client, sleep_fn=lambda seconds: None)
+
+    assert llm.generate("some prompt") == "recovered"
+    assert client.completions.calls == 2
+
+
+def test_generate_retries_after_connection_error_then_succeeds():
+    client = _FakeClient([_connection_error(), _fake_success_response("recovered")])
+    llm = GroqLLM(client=client, sleep_fn=lambda seconds: None)
+
+    assert llm.generate("some prompt") == "recovered"
+    assert client.completions.calls == 2
+
+
+def test_generate_retries_after_timeout_error_then_succeeds():
+    client = _FakeClient([_timeout_error(), _fake_success_response("recovered")])
+    llm = GroqLLM(client=client, sleep_fn=lambda seconds: None)
+
+    assert llm.generate("some prompt") == "recovered"
+    assert client.completions.calls == 2
