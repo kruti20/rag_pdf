@@ -4,7 +4,7 @@ import docx
 import pymupdf
 import pytest
 
-from core.ingest import FileTooLargeError, UnsupportedFileTypeError, ingest_document
+from core.ingest import CorruptDocumentError, FileTooLargeError, UnsupportedFileTypeError, ingest_document
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -150,3 +150,37 @@ def test_accepts_file_at_the_20mb_boundary(tmp_path):
     result = ingest_document(str(at_limit_path))  # must not raise
 
     assert result.source_type == "txt"
+
+
+def test_raises_corrupt_document_error_on_corrupted_pdf(tmp_path):
+    corrupt_path = tmp_path / "corrupt.pdf"
+    corrupt_path.write_bytes(b"%PDF-1.4 this is definitely not a valid pdf")
+
+    with pytest.raises(CorruptDocumentError, match=r"corrupted"):
+        ingest_document(str(corrupt_path))
+
+
+def test_raises_corrupt_document_error_on_password_protected_pdf(tmp_path):
+    import os
+    encrypted_path = tmp_path / "encrypted.pdf"
+    pdf = pymupdf.open()
+    pdf.new_page()
+    # write to a temp path first to avoid Windows file-lock issues
+    fd, tmp_name = __import__('tempfile').mkstemp(suffix='.pdf')
+    os.close(fd)
+    pdf.save(tmp_name, encryption=pymupdf.PDF_ENCRYPT_AES_256, user_pw="secret", owner_pw="secret")
+    pdf.close()
+    import shutil
+    shutil.copy(tmp_name, str(encrypted_path))
+    os.unlink(tmp_name)
+
+    with pytest.raises(CorruptDocumentError, match=r"password"):
+        ingest_document(str(encrypted_path))
+
+
+def test_raises_corrupt_document_error_on_corrupted_docx(tmp_path):
+    corrupt_path = tmp_path / "corrupt.docx"
+    corrupt_path.write_bytes(b"PK this is not a real docx zip archive")
+
+    with pytest.raises(CorruptDocumentError, match=r"corrupted|password"):
+        ingest_document(str(corrupt_path))

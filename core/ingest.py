@@ -1,6 +1,7 @@
 import os
 
 import docx
+import docx.opc.exceptions
 import pymupdf
 
 from core.models import ExtractedSegment
@@ -18,6 +19,10 @@ class UnsupportedFileTypeError(DocumentValidationError):
 
 
 class FileTooLargeError(DocumentValidationError):
+    pass
+
+
+class CorruptDocumentError(DocumentValidationError):
     pass
 
 
@@ -48,7 +53,17 @@ def _load_txt(file_path: str) -> IngestResult:
 
 
 def _load_docx(file_path: str) -> IngestResult:
-    document = docx.Document(file_path)
+    try:
+        document = docx.Document(file_path)
+    except docx.opc.exceptions.PackageNotFoundError:
+        raise CorruptDocumentError(
+            "This Word file appears to be corrupted or is not a valid .docx file — "
+            "please try re-saving it from Word and re-uploading."
+        )
+    except Exception as exc:
+        raise CorruptDocumentError(
+            f"Could not open the Word file ({exc}) — it may be corrupted or password-protected."
+        ) from exc
 
     segments = []
     current_heading = "Document"
@@ -70,10 +85,30 @@ def _load_docx(file_path: str) -> IngestResult:
 
 
 def _load_pdf(file_path: str) -> IngestResult:
-    segments = []
-    with pymupdf.open(file_path) as pdf:
+    try:
+        pdf = pymupdf.open(file_path)
+    except pymupdf.FileDataError as exc:
+        raise CorruptDocumentError(
+            "This PDF file appears to be corrupted and could not be opened — "
+            "please check the file and re-upload."
+        ) from exc
+
+    with pdf:
+        # Encrypted PDFs open without error but require a password to read pages.
+        if pdf.needs_pass:
+            raise CorruptDocumentError(
+                "This PDF is password-protected — please remove the password and re-upload."
+            )
+
+        segments = []
         for page_number, page in enumerate(pdf, start=1):
-            text = page.get_text().strip()
+            try:
+                text = page.get_text().strip()
+            except (ValueError, RuntimeError) as exc:
+                raise CorruptDocumentError(
+                    f"Could not read page {page_number} of the PDF — "
+                    "the file may be corrupted or encrypted."
+                ) from exc
             if not text:
                 continue
             segments.append(

@@ -64,6 +64,8 @@ tests/                  # unit tests + sample fixtures
 - No OCR — scanned/image-only PDFs will show a warning, not extracted text
 - Legacy `.doc` files are rejected — save as `.docx` first
 - Files over 20MB are rejected with a clear message (per the PRD's ~150 page / ~20MB target)
+- Corrupted, malformed, or password-protected PDFs/DOCX are rejected with a clear message
+  instead of crashing (scanned-but-readable PDFs still index — see the OCR note above)
 - Single-document sessions only (no cross-document Q&A)
 - Chat history is session-scoped only (not persisted across restarts)
 - Groq free-tier rate limits apply — `core/llm.py` retries with backoff internally; if all
