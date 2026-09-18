@@ -38,6 +38,8 @@ def reset_chat():
 if "documents" not in st.session_state:
     st.session_state.documents = {}
     reset_chat()
+if "removed_document_ids" not in st.session_state:
+    st.session_state.removed_document_ids = set()
 if "pending_question" not in st.session_state:
     st.session_state.pending_question = None
 if "pending_summarize_question" not in st.session_state:
@@ -48,7 +50,6 @@ st.title("📄 AI PDF Document Assistant")
 left, right = st.columns([1, 2])
 
 with left:
-    st.subheader(f"Documents ({len(st.session_state.documents)}/{MAX_DOCUMENTS})")
     uploaded_files = st.file_uploader(
         "Drag PDF, Word (.docx), or text files here", type=None, accept_multiple_files=True
     )
@@ -57,7 +58,10 @@ with left:
         file_bytes = uploaded_file.getvalue()
         document_id = hashlib.sha256(file_bytes).hexdigest()[:16]
 
-        if document_id in st.session_state.documents:
+        if (
+            document_id in st.session_state.documents
+            or document_id in st.session_state.removed_document_ids
+        ):
             continue
 
         if len(st.session_state.documents) >= MAX_DOCUMENTS:
@@ -88,6 +92,8 @@ with left:
                 "has_extractable_text": result.has_extractable_text,
             }
 
+    st.subheader(f"Documents ({len(st.session_state.documents)}/{MAX_DOCUMENTS})")
+
     for document_id, meta in list(st.session_state.documents.items()):
         with st.container(border=True):
             st.markdown(f"📄 **{meta['name']}**")
@@ -105,6 +111,7 @@ with left:
             if st.button("🗑 Remove", key=f"remove-{document_id}"):
                 get_vector_store().delete_document(document_id)
                 del st.session_state.documents[document_id]
+                st.session_state.removed_document_ids.add(document_id)
                 st.rerun()
 
     if st.session_state.documents:
