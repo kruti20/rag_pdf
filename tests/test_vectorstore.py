@@ -100,3 +100,9 @@ def test_delete_document_does_not_affect_other_documents(tmp_path):
 
     assert store.get_all_chunks("docA") == []
     assert [c["id"] for c in store.get_all_chunks("docB")] == ["docB-0"]
+
+
+def test_delete_document_on_a_document_with_no_indexed_chunks_does_not_raise(tmp_path):
+    store = VectorStore(persist_directory=str(tmp_path))
+
+    store.delete_document("never-indexed-doc")  # must not raise

@@ -54,6 +54,11 @@ with left:
         "Drag PDF, Word (.docx), or text files here", type=None, accept_multiple_files=True
     )
 
+    currently_selected_ids = {
+        hashlib.sha256(f.getvalue()).hexdigest()[:16] for f in uploaded_files or []
+    }
+    st.session_state.removed_document_ids &= currently_selected_ids
+
     for uploaded_file in uploaded_files or []:
         file_bytes = uploaded_file.getvalue()
         document_id = hashlib.sha256(file_bytes).hexdigest()[:16]
@@ -114,7 +119,7 @@ with left:
                 st.session_state.removed_document_ids.add(document_id)
                 st.rerun()
 
-    if st.session_state.documents:
+    if st.session_state.documents and not st.session_state.pending_summarize_question:
         st.markdown("**Suggested questions:**")
         for question in SUGGESTED_QUESTIONS:
             if st.button(question, key=f"suggested-{question}", use_container_width=True):
@@ -143,14 +148,18 @@ with right:
         with st.chat_message("assistant"):
             st.markdown("Which document would you like to summarize?")
             library = list(st.session_state.documents.items())
+            valid_ids = {doc_id for doc_id, _ in library}
+            if st.session_state.get("summarize-choice") not in valid_ids:
+                st.session_state.pop("summarize-choice", None)
             chosen_id = st.radio(
                 "Choose a document",
                 options=[doc_id for doc_id, _ in library],
                 format_func=lambda doc_id: st.session_state.documents[doc_id]["name"],
+                index=None,
                 key="summarize-choice",
                 label_visibility="collapsed",
             )
-            if st.button("Summarize", key="summarize-confirm"):
+            if st.button("Summarize", key="summarize-confirm", disabled=chosen_id is None):
                 question = st.session_state.pending_summarize_question
                 document_names = {doc_id: meta["name"] for doc_id, meta in st.session_state.documents.items()}
                 history_for_prompt = [
