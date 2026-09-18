@@ -54,25 +54,28 @@ with left:
         "Drag PDF, Word (.docx), or text files here", type=None, accept_multiple_files=True
     )
 
-    currently_selected_ids = {
-        hashlib.sha256(f.getvalue()).hexdigest()[:16] for f in uploaded_files or []
-    }
-    st.session_state.removed_document_ids &= currently_selected_ids
+    selected_files = [
+        (hashlib.sha256(f.getvalue()).hexdigest()[:16], f) for f in uploaded_files or []
+    ]
+    st.session_state.removed_document_ids &= {doc_id for doc_id, _ in selected_files}
 
-    overflow_file_names = []
-    for uploaded_file in uploaded_files or []:
+    new_files = [
+        (doc_id, f)
+        for doc_id, f in selected_files
+        if doc_id not in st.session_state.documents
+        and doc_id not in st.session_state.removed_document_ids
+    ]
+    remaining_capacity = max(0, MAX_DOCUMENTS - len(st.session_state.documents))
+    files_to_index, overflow_files = new_files[:remaining_capacity], new_files[remaining_capacity:]
+
+    if overflow_files:
+        st.error(
+            f"Maximum {MAX_DOCUMENTS} documents allowed — remove one before adding: "
+            + ", ".join(f"'{f.name}'" for _, f in overflow_files)
+        )
+
+    for document_id, uploaded_file in files_to_index:
         file_bytes = uploaded_file.getvalue()
-        document_id = hashlib.sha256(file_bytes).hexdigest()[:16]
-
-        if (
-            document_id in st.session_state.documents
-            or document_id in st.session_state.removed_document_ids
-        ):
-            continue
-
-        if len(st.session_state.documents) >= MAX_DOCUMENTS:
-            overflow_file_names.append(uploaded_file.name)
-            continue
 
         suffix = Path(uploaded_file.name).suffix
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
@@ -94,12 +97,6 @@ with left:
                 "chunk_count": result.chunk_count,
                 "has_extractable_text": result.has_extractable_text,
             }
-
-    if overflow_file_names:
-        st.error(
-            f"Maximum {MAX_DOCUMENTS} documents allowed — remove one before adding: "
-            + ", ".join(f"'{name}'" for name in overflow_file_names)
-        )
 
     st.subheader(f"Documents ({len(st.session_state.documents)}/{MAX_DOCUMENTS})")
 
