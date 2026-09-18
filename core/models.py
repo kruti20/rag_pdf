@@ -21,6 +21,7 @@ class Chunk:
 class Source:
     location_label: str
     snippet: str
+    document_id: str = ""
 
 
 @dataclass

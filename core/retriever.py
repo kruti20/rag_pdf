@@ -80,17 +80,35 @@ def dedupe_by_id(chunks: list[dict]) -> list[dict]:
     return result
 
 
-def retrieve(vector_store: VectorStore, document_id: str, question: str) -> list[dict]:
+def retrieve(vector_store: VectorStore, document_ids: list[str], question: str) -> list[dict]:
     question_type = detect_question_type(question)
     query_embedding = embed_texts([question])[0]
 
     if question_type == "factual":
-        results = vector_store.query(document_id, query_embedding, k=FACTUAL_K)
-        return dedupe_by_id(results)
+        merged = []
+        for document_id in document_ids:
+            for match in vector_store.query(document_id, query_embedding, k=FACTUAL_K):
+                match["document_id"] = document_id
+                merged.append(match)
+        merged.sort(key=lambda m: m["distance"])
+        return dedupe_by_id(merged)[:FACTUAL_K]
 
     # summarization / exhaustive: hybrid keyword + semantic, since pure top-k
-    # can silently miss occurrences a keyword scan would catch.
-    semantic_results = vector_store.query(document_id, query_embedding, k=BROAD_K)
+    # can silently miss occurrences a keyword scan would catch. The semantic
+    # half is capped globally (BROAD_K across all documents); the keyword
+    # half is kept in full so "find all references" never silently drops a
+    # real match just because more documents are loaded.
+    semantic_results = []
+    keyword_results = []
     keywords = extract_keywords(question)
-    keyword_results = keyword_search(vector_store.get_all_chunks(document_id), keywords)
-    return dedupe_by_id(keyword_results + semantic_results)
+    for document_id in document_ids:
+        for match in vector_store.query(document_id, query_embedding, k=BROAD_K):
+            match["document_id"] = document_id
+            semantic_results.append(match)
+        doc_chunks = vector_store.get_all_chunks(document_id)
+        for chunk in doc_chunks:
+            chunk["document_id"] = document_id
+        keyword_results.extend(keyword_search(doc_chunks, keywords))
+
+    semantic_results.sort(key=lambda m: m["distance"])
+    return dedupe_by_id(keyword_results + semantic_results[:BROAD_K])

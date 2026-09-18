@@ -81,10 +81,11 @@ def test_retrieve_factual_question_returns_a_small_top_k(tmp_path):
         vector_store=store,
     )
 
-    results = retrieve(store, "pdf-doc", "What is DE Monitoring?")
+    results = retrieve(store, ["pdf-doc"], "What is DE Monitoring?")
 
     assert 0 < len(results) <= 5
     assert any(r["location_label"] == "p.4" for r in results)
+    assert all(r["document_id"] == "pdf-doc" for r in results)
 
 
 def test_retrieve_exhaustive_question_finds_keyword_matches_semantic_search_could_miss(tmp_path):
@@ -95,7 +96,37 @@ def test_retrieve_exhaustive_question_finds_keyword_matches_semantic_search_coul
         vector_store=store,
     )
 
-    results = retrieve(store, "pdf-doc", "Find all references to prompt injection")
+    results = retrieve(store, ["pdf-doc"], "Find all references to prompt injection")
 
     assert any(r["location_label"] == "p.22" for r in results)
     assert len(results) > 5  # broader than a plain factual top-k
+
+
+def test_retrieve_merges_factual_results_across_documents_and_caps_globally(tmp_path):
+    store = VectorStore(persist_directory=str(tmp_path))
+    doc_a = tmp_path / "doc_a.txt"
+    doc_a.write_text("The quarterly revenue report shows steady growth.\n" * 5)
+    doc_b = tmp_path / "doc_b.txt"
+    doc_b.write_text("The lease termination clause requires 30 days notice.\n" * 5)
+    index_document(str(doc_a), document_id="doc-a", vector_store=store)
+    index_document(str(doc_b), document_id="doc-b", vector_store=store)
+
+    results = retrieve(store, ["doc-a", "doc-b"], "What does the lease termination clause require?")
+
+    assert 0 < len(results) <= 5
+    assert any(r["document_id"] == "doc-b" for r in results)
+
+
+def test_retrieve_exhaustive_merges_keyword_matches_across_documents(tmp_path):
+    store = VectorStore(persist_directory=str(tmp_path))
+    doc_a = tmp_path / "doc_a.txt"
+    doc_a.write_text("Penalty clause: late delivery incurs a penalty fee.\n" * 3)
+    doc_b = tmp_path / "doc_b.txt"
+    doc_b.write_text("Separate penalty clause: early termination incurs a penalty fee.\n" * 3)
+    index_document(str(doc_a), document_id="doc-a", vector_store=store)
+    index_document(str(doc_b), document_id="doc-b", vector_store=store)
+
+    results = retrieve(store, ["doc-a", "doc-b"], "Find all references to penalty")
+
+    found_document_ids = {r["document_id"] for r in results}
+    assert found_document_ids == {"doc-a", "doc-b"}

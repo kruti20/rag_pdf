@@ -10,9 +10,12 @@ load_dotenv()
 from core.chat_handler import build_answer_message
 from core.indexing import index_document
 from core.ingest import DocumentValidationError
+from core.retriever import detect_question_type
 from core.vectorstore import VectorStore
 
 st.set_page_config(page_title="AI PDF Document Assistant", page_icon="📄", layout="wide")
+
+MAX_DOCUMENTS = 10
 
 SUGGESTED_QUESTIONS = [
     "Summarize this document",
@@ -32,60 +35,91 @@ def reset_chat():
     st.session_state.chat_history = []
 
 
-if "document_id" not in st.session_state:
-    st.session_state.document_id = None
-    st.session_state.document_name = None
+if "documents" not in st.session_state:
+    st.session_state.documents = {}
     reset_chat()
+if "removed_document_ids" not in st.session_state:
+    st.session_state.removed_document_ids = set()
 if "pending_question" not in st.session_state:
     st.session_state.pending_question = None
+if "pending_summarize_question" not in st.session_state:
+    st.session_state.pending_summarize_question = None
 
 st.title("📄 AI PDF Document Assistant")
 
 left, right = st.columns([1, 2])
 
 with left:
-    st.subheader("Document")
-    uploaded_file = st.file_uploader("Drag a PDF, Word (.docx), or text file here", type=None)
+    uploaded_files = st.file_uploader(
+        "Drag PDF, Word (.docx), or text files here", type=None, accept_multiple_files=True
+    )
 
-    if uploaded_file is not None:
+    currently_selected_ids = {
+        hashlib.sha256(f.getvalue()).hexdigest()[:16] for f in uploaded_files or []
+    }
+    st.session_state.removed_document_ids &= currently_selected_ids
+
+    for uploaded_file in uploaded_files or []:
         file_bytes = uploaded_file.getvalue()
         document_id = hashlib.sha256(file_bytes).hexdigest()[:16]
 
-        if document_id != st.session_state.document_id:
-            suffix = Path(uploaded_file.name).suffix
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                tmp.write(file_bytes)
-                tmp_path = tmp.name
+        if (
+            document_id in st.session_state.documents
+            or document_id in st.session_state.removed_document_ids
+        ):
+            continue
 
-            try:
-                with st.spinner("Extracting text… Chunking… Embedding…"):
-                    result = index_document(
-                        tmp_path, document_id=document_id, vector_store=get_vector_store()
-                    )
-            except DocumentValidationError as e:
-                st.error(str(e))
-            else:
-                st.session_state.document_id = document_id
-                st.session_state.document_name = uploaded_file.name
-                st.session_state.source_type = result.source_type
-                st.session_state.section_count = len(result.segments)
-                st.session_state.chunk_count = result.chunk_count
-                st.session_state.has_extractable_text = result.has_extractable_text
-                reset_chat()
-
-    if st.session_state.document_id:
-        st.markdown(f"📄 **{st.session_state.document_name}**")
-        size_label = SIZE_LABELS.get(st.session_state.source_type, "sections")
-        st.caption(f"{st.session_state.section_count} {size_label} · {st.session_state.source_type.upper()}")
-
-        if not st.session_state.has_extractable_text:
-            st.warning(
-                "This document looks scanned or has no extractable text — "
-                "answers may be limited or unavailable."
+        if len(st.session_state.documents) >= MAX_DOCUMENTS:
+            st.error(
+                f"Maximum {MAX_DOCUMENTS} documents — remove one before adding "
+                f"'{uploaded_file.name}'"
             )
-        else:
-            st.success(f"indexed — {st.session_state.chunk_count} chunks")
+            continue
 
+        suffix = Path(uploaded_file.name).suffix
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(file_bytes)
+            tmp_path = tmp.name
+
+        try:
+            with st.spinner(f"Indexing {uploaded_file.name}…"):
+                result = index_document(
+                    tmp_path, document_id=document_id, vector_store=get_vector_store()
+                )
+        except DocumentValidationError as e:
+            st.error(f"{uploaded_file.name}: {e}")
+        else:
+            st.session_state.documents[document_id] = {
+                "name": uploaded_file.name,
+                "source_type": result.source_type,
+                "section_count": len(result.segments),
+                "chunk_count": result.chunk_count,
+                "has_extractable_text": result.has_extractable_text,
+            }
+
+    st.subheader(f"Documents ({len(st.session_state.documents)}/{MAX_DOCUMENTS})")
+
+    for document_id, meta in list(st.session_state.documents.items()):
+        with st.container(border=True):
+            st.markdown(f"📄 **{meta['name']}**")
+            size_label = SIZE_LABELS.get(meta["source_type"], "sections")
+            st.caption(f"{meta['section_count']} {size_label} · {meta['source_type'].upper()}")
+
+            if not meta["has_extractable_text"]:
+                st.warning(
+                    "This document looks scanned or has no extractable text — "
+                    "answers may be limited or unavailable."
+                )
+            else:
+                st.success(f"indexed — {meta['chunk_count']} chunks")
+
+            if st.button("🗑 Remove", key=f"remove-{document_id}"):
+                get_vector_store().delete_document(document_id)
+                del st.session_state.documents[document_id]
+                st.session_state.removed_document_ids.add(document_id)
+                st.rerun()
+
+    if st.session_state.documents and not st.session_state.pending_summarize_question:
         st.markdown("**Suggested questions:**")
         for question in SUGGESTED_QUESTIONS:
             if st.button(question, key=f"suggested-{question}", use_container_width=True):
@@ -95,7 +129,7 @@ with left:
 with right:
     st.subheader("Chat")
 
-    if not st.session_state.document_id:
+    if not st.session_state.documents:
         st.info("Upload a PDF, Word (.docx), or text file to get started.")
 
     for message in st.session_state.chat_history:
@@ -107,27 +141,70 @@ with right:
                 if message.get("sources"):
                     st.caption("Sources: " + ", ".join(message["sources"]))
 
-    document_ready = st.session_state.document_id is not None
+    if st.session_state.pending_summarize_question and not st.session_state.documents:
+        st.session_state.pending_summarize_question = None
+
+    if st.session_state.pending_summarize_question:
+        with st.chat_message("assistant"):
+            st.markdown("Which document would you like to summarize?")
+            library = list(st.session_state.documents.items())
+            valid_ids = {doc_id for doc_id, _ in library}
+            if st.session_state.get("summarize-choice") not in valid_ids:
+                st.session_state.pop("summarize-choice", None)
+            chosen_id = st.radio(
+                "Choose a document",
+                options=[doc_id for doc_id, _ in library],
+                format_func=lambda doc_id: st.session_state.documents[doc_id]["name"],
+                index=None,
+                key="summarize-choice",
+                label_visibility="collapsed",
+            )
+            if st.button("Summarize", key="summarize-confirm", disabled=chosen_id is None):
+                question = st.session_state.pending_summarize_question
+                document_names = {doc_id: meta["name"] for doc_id, meta in st.session_state.documents.items()}
+                history_for_prompt = [
+                    (m["role"], m["text"]) for m in st.session_state.chat_history[:-1]
+                ]
+                with st.spinner("Summarizing…"):
+                    message = build_answer_message(
+                        get_vector_store(),
+                        [chosen_id],
+                        question,
+                        document_names=document_names,
+                        chat_history=history_for_prompt,
+                    )
+                    st.session_state.chat_history.append(message)
+                st.session_state.pending_summarize_question = None
+                st.rerun()
+
+    documents_ready = bool(st.session_state.documents) and not st.session_state.pending_summarize_question
     question = st.chat_input(
-        "Ask a question about this document" if document_ready else "Upload a document to get started",
-        disabled=not document_ready,
+        "Ask a question about your documents" if st.session_state.documents else "Upload a document to get started",
+        disabled=not documents_ready,
     )
     if st.session_state.pending_question:
         question = st.session_state.pending_question
         st.session_state.pending_question = None
 
-    if question and document_ready:
+    if question and documents_ready:
         st.session_state.chat_history.append({"role": "user", "text": question})
-        history_for_prompt = [
-            (m["role"], m["text"]) for m in st.session_state.chat_history[:-1]
-        ]
+        document_ids = list(st.session_state.documents.keys())
+        document_names = {doc_id: meta["name"] for doc_id, meta in st.session_state.documents.items()}
 
-        with st.spinner("Searching document…"):
-            message = build_answer_message(
-                get_vector_store(),
-                st.session_state.document_id,
-                question,
-                chat_history=history_for_prompt,
-            )
-            st.session_state.chat_history.append(message)
-        st.rerun()
+        if detect_question_type(question) == "summarization" and len(document_ids) > 1:
+            st.session_state.pending_summarize_question = question
+            st.rerun()
+        else:
+            history_for_prompt = [
+                (m["role"], m["text"]) for m in st.session_state.chat_history[:-1]
+            ]
+            with st.spinner("Searching documents…"):
+                message = build_answer_message(
+                    get_vector_store(),
+                    document_ids,
+                    question,
+                    document_names=document_names,
+                    chat_history=history_for_prompt,
+                )
+                st.session_state.chat_history.append(message)
+            st.rerun()

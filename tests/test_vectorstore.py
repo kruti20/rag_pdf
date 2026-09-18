@@ -80,3 +80,29 @@ def test_get_all_chunks_on_empty_document_returns_empty_list(tmp_path):
     store = VectorStore(persist_directory=str(tmp_path))
 
     assert store.get_all_chunks("nonexistent-doc") == []
+
+
+def test_delete_document_removes_its_chunks(tmp_path):
+    store = VectorStore(persist_directory=str(tmp_path))
+    store.add_chunks([_chunk("doc1-0", "doc1", "p.1", "payment due date", [1.0, 0.0, 0.0])])
+
+    store.delete_document("doc1")
+
+    assert store.get_all_chunks("doc1") == []
+
+
+def test_delete_document_does_not_affect_other_documents(tmp_path):
+    store = VectorStore(persist_directory=str(tmp_path))
+    store.add_chunks([_chunk("docA-0", "docA", "p.1", "from doc A", [1.0, 0.0, 0.0])])
+    store.add_chunks([_chunk("docB-0", "docB", "p.1", "from doc B", [1.0, 0.0, 0.0])])
+
+    store.delete_document("docA")
+
+    assert store.get_all_chunks("docA") == []
+    assert [c["id"] for c in store.get_all_chunks("docB")] == ["docB-0"]
+
+
+def test_delete_document_on_a_document_with_no_indexed_chunks_does_not_raise(tmp_path):
+    store = VectorStore(persist_directory=str(tmp_path))
+
+    store.delete_document("never-indexed-doc")  # must not raise

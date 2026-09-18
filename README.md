@@ -1,8 +1,8 @@
 # AI PDF Document Assistant
 
-A RAG app for asking natural-language questions about a PDF, DOCX, or TXT document, with
-answers grounded in the document and cited by page/paragraph/line. Runs entirely on free-tier
-services — no paid LLM API key required.
+A RAG app for asking natural-language questions across a library of PDF, DOCX, or TXT
+documents, with answers grounded in the documents and cited by filename plus
+page/paragraph/line. Runs entirely on free-tier services — no paid LLM API key required.
 
 See `docs/` for the full product/tech/architecture spec this project was built from.
 
@@ -66,7 +66,7 @@ tests/                  # unit tests + sample fixtures
 - Files over 20MB are rejected with a clear message (per the PRD's ~150 page / ~20MB target)
 - Corrupted, malformed, or password-protected PDFs/DOCX are rejected with a clear message
   instead of crashing (scanned-but-readable PDFs still index — see the OCR note above)
-- Single-document sessions only (no cross-document Q&A)
+- Up to 10 documents per session; summarizing with multiple loaded prompts you to pick one
 - Chat history is session-scoped only (not persisted across restarts)
 - Groq free-tier rate limits apply — `core/llm.py` retries with backoff internally; if all
   retries are exhausted, the chat shows a friendly "hit the rate limit" message rather than

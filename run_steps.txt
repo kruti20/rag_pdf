@@ -41,10 +41,14 @@ AI PDF Document Assistant - How to Run
    normal, not a crash.
 
 6. Use the app
-   - Upload a PDF, DOCX, or TXT file (max 20MB; legacy .doc is rejected - save as .docx)
-   - Wait for "indexed - N chunks" to appear
+   - Upload up to 10 PDF, DOCX, or TXT files (max 20MB each; legacy .doc is rejected - save as .docx)
+   - Wait for "indexed - N chunks" to appear next to each file
    - Ask a question in the chat box, or click one of the suggested questions
-   - Answers are grounded in the document and cited by page/paragraph/line
+   - Questions search across every uploaded document; answers are grounded and
+     cited by document name plus page/paragraph/line
+   - Asking to "summarize" with more than one document loaded will prompt you
+     to pick which single document to summarize
+   - Remove a document with its 🗑 button to free a slot (max 10 at a time)
 
 Running tests
 -------------
@@ -56,7 +60,9 @@ Known limitations (MVP)
 - No OCR - scanned/image-only PDFs will show a warning, not extracted text
 - Legacy .doc files are rejected - save as .docx first
 - Files over 20MB are rejected
-- Single-document sessions only (no cross-document Q&A)
+- Up to 10 documents per session; the library resets on restart (same as chat history)
+- "Find all references to X" across many large documents can be slow/costly, since
+  every real match is returned rather than capped
 - Chat history is session-scoped only (not persisted across restarts)
 - Groq free-tier rate limits apply - the app retries with backoff internally, and shows
   a friendly message if retries are exhausted

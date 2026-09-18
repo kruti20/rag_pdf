@@ -44,3 +44,24 @@ def test_prompt_includes_chat_history_when_provided():
 def test_prompt_omits_history_section_when_none_provided():
     prompt = build_prompt("Anything?", [])
     assert "Conversation so far" not in prompt
+
+
+def test_prompt_labels_each_chunk_with_its_document_name():
+    chunks = [
+        {"document_id": "doc-a", "location_label": "p.1", "text": "Payment is due on the first."},
+        {"document_id": "doc-b", "location_label": "p.2", "text": "Termination requires notice."},
+    ]
+    document_names = {"doc-a": "ContractA.pdf", "doc-b": "ContractB.pdf"}
+
+    prompt = build_prompt("What is the due date?", chunks, document_names)
+
+    assert "[ContractA.pdf — p.1]" in prompt
+    assert "[ContractB.pdf — p.2]" in prompt
+
+
+def test_prompt_falls_back_to_bare_location_label_when_document_name_unknown():
+    chunks = [{"document_id": "doc-a", "location_label": "p.1", "text": "Payment is due on the first."}]
+
+    prompt = build_prompt("What is the due date?", chunks)
+
+    assert "[p.1]" in prompt
