@@ -70,9 +70,12 @@ with left:
 
     if overflow_files:
         st.error(
-            f"Maximum {MAX_DOCUMENTS} documents allowed — remove one before adding: "
-            + ", ".join(f"'{f.name}'" for _, f in overflow_files)
+            f"Maximum {MAX_DOCUMENTS} documents allowed — you selected {len(new_files)} new "
+            f"file(s) but only {remaining_capacity} slot(s) are free. Remove "
+            f"{len(overflow_files)} file(s) from the selection above (click the ×) or delete a "
+            "document below. Nothing is indexed until the selection fits."
         )
+        files_to_index = []
 
     for document_id, uploaded_file in files_to_index:
         file_bytes = uploaded_file.getvalue()
