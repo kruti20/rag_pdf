@@ -105,7 +105,11 @@ with left:
 
     for document_id, meta in list(st.session_state.documents.items()):
         with st.container(border=True):
-            st.markdown(f"**{meta['name']}**")
+            name_col, remove_col = st.columns([0.88, 0.12], vertical_alignment="center")
+            name_col.markdown(f"**{meta['name']}**")
+            remove_clicked = remove_col.button(
+                "✕", key=f"remove-{document_id}", type="tertiary", help="Remove document"
+            )
             size_label = SIZE_LABELS.get(meta["source_type"], "sections")
             st.caption(f"{meta['section_count']} {size_label} · {meta['source_type'].upper()}")
 
@@ -117,7 +121,7 @@ with left:
             else:
                 st.success(f"indexed — {meta['chunk_count']} chunks")
 
-            if st.button("🗑 Remove", key=f"remove-{document_id}"):
+            if remove_clicked:
                 get_vector_store().delete_document(document_id)
                 del st.session_state.documents[document_id]
                 st.session_state.removed_document_ids.add(document_id)

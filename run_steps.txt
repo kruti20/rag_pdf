@@ -34,7 +34,7 @@ AI PDF Document Assistant - How to Run
    (or client.models.list()) for current model names.
 
 5. Run the app
-   streamlit run app.py
+ streamlit run app.py  
 
    Then open the URL Streamlit prints (usually http://localhost:8501) in your browser.
    First run is slow (~30-45s) while it imports torch/transformers/chromadb - this is
@@ -48,7 +48,7 @@ AI PDF Document Assistant - How to Run
      cited by document name plus page/paragraph/line
    - Asking to "summarize" with more than one document loaded will prompt you
      to pick which single document to summarize
-   - Remove a document with its 🗑 button to free a slot (max 10 at a time)
+   - Remove a document with the ✕ next to its name to free a slot (max 10 at a time)
 
 Running tests
 -------------
