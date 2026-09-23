@@ -10,7 +10,7 @@ RETRYABLE_ERRORS = (RateLimitError, InternalServerError, APIConnectionError)
 # stack doc no longer exists; gpt-oss-120b/20b are the current equivalents.
 MODEL_PRIMARY = "openai/gpt-oss-120b"
 MODEL_FALLBACK = "openai/gpt-oss-20b"
-MAX_TOKENS = 1024
+MAX_TOKENS = 4096
 
 
 class GroqLLM:

@@ -6,4 +6,5 @@ __pycache__/
 storage/chroma_db/
 .pytest_cache/
 .worktrees/
+.claude/worktrees/
 .superpowers/

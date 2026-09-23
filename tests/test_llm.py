@@ -27,9 +27,11 @@ class _FakeCompletions:
     def __init__(self, responses):
         self._responses = list(responses)
         self.calls = 0
+        self.last_kwargs = None
 
     def create(self, **kwargs):
         self.calls += 1
+        self.last_kwargs = kwargs
         result = self._responses.pop(0)
         if isinstance(result, Exception):
             raise result
@@ -104,3 +106,12 @@ def test_generate_retries_after_timeout_error_then_succeeds():
 
     assert llm.generate("some prompt") == "recovered"
     assert client.completions.calls == 2
+
+
+def test_generate_requests_a_token_budget_large_enough_for_detailed_summaries():
+    client = _FakeClient([_fake_success_response("hello")])
+    llm = GroqLLM(client=client, sleep_fn=lambda seconds: None)
+
+    llm.generate("some prompt")
+
+    assert client.completions.last_kwargs["max_tokens"] >= 4096

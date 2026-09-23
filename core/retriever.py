@@ -5,6 +5,7 @@ from core.vectorstore import VectorStore
 
 FACTUAL_K = 5
 BROAD_K = 12
+SUMMARY_MAX_CHUNKS_PER_DOCUMENT = 60
 
 _EXHAUSTIVE_PATTERNS = [
     r"\bfind all\b",
@@ -80,11 +81,19 @@ def dedupe_by_id(chunks: list[dict]) -> list[dict]:
     return result
 
 
+def _evenly_spaced_sample(chunks: list[dict], max_count: int) -> list[dict]:
+    if len(chunks) <= max_count or max_count <= 1:
+        return chunks[:max_count] if max_count <= 1 else chunks
+    step = (len(chunks) - 1) / (max_count - 1)
+    indices = sorted({round(i * step) for i in range(max_count)})
+    return [chunks[i] for i in indices]
+
+
 def retrieve(vector_store: VectorStore, document_ids: list[str], question: str) -> list[dict]:
     question_type = detect_question_type(question)
-    query_embedding = embed_texts([question])[0]
 
     if question_type == "factual":
+        query_embedding = embed_texts([question])[0]
         merged = []
         for document_id in document_ids:
             for match in vector_store.query(document_id, query_embedding, k=FACTUAL_K):
@@ -93,11 +102,26 @@ def retrieve(vector_store: VectorStore, document_ids: list[str], question: str) 
         merged.sort(key=lambda m: m["distance"])
         return dedupe_by_id(merged)[:FACTUAL_K]
 
-    # summarization / exhaustive: hybrid keyword + semantic, since pure top-k
-    # can silently miss occurrences a keyword scan would catch. The semantic
-    # half is capped globally (BROAD_K across all documents); the keyword
-    # half is kept in full so "find all references" never silently drops a
-    # real match just because more documents are loaded.
+    if question_type == "summarization":
+        # A representative overview of the WHOLE document reads better than
+        # chunks that happen to be semantically closest to the literal words
+        # "summarize this document" — that tends to concentrate on just a
+        # couple of pages. Sample evenly across every chunk instead, capped
+        # so large documents still fit the LLM's context window.
+        sampled = []
+        for document_id in document_ids:
+            doc_chunks = vector_store.get_all_chunks(document_id)
+            for chunk in doc_chunks:
+                chunk["document_id"] = document_id
+            sampled.extend(_evenly_spaced_sample(doc_chunks, SUMMARY_MAX_CHUNKS_PER_DOCUMENT))
+        return sampled
+
+    # exhaustive: hybrid keyword + semantic, since pure top-k can silently
+    # miss occurrences a keyword scan would catch. The semantic half is
+    # capped globally (BROAD_K across all documents); the keyword half is
+    # kept in full so "find all references" never silently drops a real
+    # match just because more documents are loaded.
+    query_embedding = embed_texts([question])[0]
     semantic_results = []
     keyword_results = []
     keywords = extract_keywords(question)

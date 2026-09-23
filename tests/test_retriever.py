@@ -130,3 +130,30 @@ def test_retrieve_exhaustive_merges_keyword_matches_across_documents(tmp_path):
 
     found_document_ids = {r["document_id"] for r in results}
     assert found_document_ids == {"doc-a", "doc-b"}
+
+
+def test_retrieve_summarization_returns_every_chunk_of_a_small_document(tmp_path):
+    store = VectorStore(persist_directory=str(tmp_path))
+    doc = tmp_path / "doc.txt"
+    doc.write_text("\n".join(f"Line {i}: unique content {i}." for i in range(1, 41)))
+    index_document(str(doc), document_id="doc-1", vector_store=store)
+
+    results = retrieve(store, ["doc-1"], "Summarize this document")
+
+    # 40 lines / 20 lines-per-segment = 2 segments = 2 chunks; full coverage.
+    assert len(results) == 2
+    assert all(r["document_id"] == "doc-1" for r in results)
+
+
+def test_retrieve_summarization_samples_across_the_whole_document_when_capped(tmp_path):
+    store = VectorStore(persist_directory=str(tmp_path))
+    doc = tmp_path / "doc.txt"
+    # 1300 lines / 20 lines-per-segment = 65 chunks, exceeding the 60-chunk cap.
+    doc.write_text("\n".join(f"Marker_{i}: unique content {i}." for i in range(1, 1301)))
+    index_document(str(doc), document_id="doc-1", vector_store=store)
+
+    results = retrieve(store, ["doc-1"], "Summarize this document")
+
+    assert len(results) <= 60
+    assert any("Marker_1:" in r["text"] for r in results)
+    assert any("Marker_1300" in r["text"] for r in results)

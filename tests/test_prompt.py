@@ -65,3 +65,9 @@ def test_prompt_falls_back_to_bare_location_label_when_document_name_unknown():
     prompt = build_prompt("What is the due date?", chunks)
 
     assert "[p.1]" in prompt
+
+
+def test_prompt_instructs_a_thorough_detailed_summary():
+    prompt = build_prompt("Summarize this document", [])
+
+    assert "thorough" in prompt.lower()
