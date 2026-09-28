@@ -1,7 +1,14 @@
 from pathlib import Path
 
 from core.indexing import index_document
-from core.retriever import dedupe_by_id, detect_question_type, extract_keywords, keyword_search, retrieve
+from core.retriever import (
+    SUMMARY_MAX_CONTEXT_CHARS,
+    dedupe_by_id,
+    detect_question_type,
+    extract_keywords,
+    keyword_search,
+    retrieve,
+)
 from core.vectorstore import VectorStore
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -155,5 +162,26 @@ def test_retrieve_summarization_samples_across_the_whole_document_when_capped(tm
     results = retrieve(store, ["doc-1"], "Summarize this document")
 
     assert len(results) <= 60
+    assert any("Marker_1:" in r["text"] for r in results)
+    assert any("Marker_1300" in r["text"] for r in results)
+
+
+def test_retrieve_summarization_stays_within_a_total_character_budget_for_large_chunks(tmp_path):
+    store = VectorStore(persist_directory=str(tmp_path))
+    doc = tmp_path / "doc.txt"
+    # Each line is long, so even after the 60-chunk cap the sampled chunks
+    # are each near the max chunk size (~2800 chars) — 60 * 2800 = 168,000
+    # chars, far over a safe LLM request budget. Mirrors a real production
+    # bug: a 305-chunk document's summarization prompt was rejected by
+    # Groq's free-tier tokens-per-minute limit (9020 requested vs. an 8000
+    # TPM limit) because the 60-chunk cap alone doesn't bound total size.
+    doc.write_text("\n".join(f"Marker_{i}: " + ("x" * 600) for i in range(1, 1301)))
+    index_document(str(doc), document_id="doc-1", vector_store=store)
+
+    results = retrieve(store, ["doc-1"], "Summarize this document")
+
+    total_chars = sum(len(r["text"]) for r in results)
+    assert total_chars <= SUMMARY_MAX_CONTEXT_CHARS
+    # still a genuine whole-document sample, not collapsed to the start only
     assert any("Marker_1:" in r["text"] for r in results)
     assert any("Marker_1300" in r["text"] for r in results)

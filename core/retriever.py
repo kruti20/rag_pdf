@@ -6,6 +6,13 @@ from core.vectorstore import VectorStore
 FACTUAL_K = 5
 BROAD_K = 12
 SUMMARY_MAX_CHUNKS_PER_DOCUMENT = 60
+# Chunk count alone doesn't bound prompt size when chunks are near the max
+# chunk size — a 305-chunk production document hit Groq's free-tier 8000
+# tokens-per-minute limit with a 60-chunk (~9000-token) summarization
+# prompt. ~4 chars/token (this project's existing heuristic, see
+# core/chunker.py) puts 20000 chars at ~5000 tokens, safely under that limit
+# with headroom for the system prompt and multiple loaded documents.
+SUMMARY_MAX_CONTEXT_CHARS = 20000
 
 _EXHAUSTIVE_PATTERNS = [
     r"\bfind all\b",
@@ -89,6 +96,19 @@ def _evenly_spaced_sample(chunks: list[dict], max_count: int) -> list[dict]:
     return [chunks[i] for i in indices]
 
 
+def _budget_limited_sample(chunks: list[dict], max_count: int, max_chars: int) -> list[dict]:
+    sample = _evenly_spaced_sample(chunks, max_count)
+    total_chars = sum(len(c["text"]) for c in sample)
+    if total_chars <= max_chars or not sample:
+        return sample
+    avg_chars = total_chars / len(sample)
+    # Re-sample evenly over the already-evenly-spaced set (not the raw chunk
+    # list) so the reduced set still spans the document's start and end,
+    # instead of just truncating the tail off a size-sorted or index-ordered list.
+    reduced_count = max(1, int(max_chars // avg_chars))
+    return _evenly_spaced_sample(sample, reduced_count)
+
+
 def retrieve(vector_store: VectorStore, document_ids: list[str], question: str) -> list[dict]:
     question_type = detect_question_type(question)
 
@@ -109,11 +129,14 @@ def retrieve(vector_store: VectorStore, document_ids: list[str], question: str) 
         # couple of pages. Sample evenly across every chunk instead, capped
         # so large documents still fit the LLM's context window.
         sampled = []
+        per_document_char_budget = SUMMARY_MAX_CONTEXT_CHARS // max(len(document_ids), 1)
         for document_id in document_ids:
             doc_chunks = vector_store.get_all_chunks(document_id)
             for chunk in doc_chunks:
                 chunk["document_id"] = document_id
-            sampled.extend(_evenly_spaced_sample(doc_chunks, SUMMARY_MAX_CHUNKS_PER_DOCUMENT))
+            sampled.extend(
+                _budget_limited_sample(doc_chunks, SUMMARY_MAX_CHUNKS_PER_DOCUMENT, per_document_char_budget)
+            )
         return sampled
 
     # exhaustive: hybrid keyword + semantic, since pure top-k can silently
