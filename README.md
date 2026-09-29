@@ -4,51 +4,7 @@ A RAG app for asking natural-language questions across a library of PDF, DOCX, o
 documents, with answers grounded in the documents and cited by filename plus
 page/paragraph/line. Runs entirely on free-tier services — no paid LLM API key required.
 
-See `docs/` for the full product/tech/architecture spec this project was built from.
-                  ┌─────────────────┐
-                  │    Streamlit    │
-                  │       UI        │
-                  └────────┬────────┘
-                           │
-                    Upload Document
-                           │
-                           ▼
-                  ┌─────────────────┐
-                  │ Document Loader │
-                  │ PDF/DOCX/TXT    │
-                  └────────┬────────┘
-                           │
-                           ▼
-                  ┌─────────────────┐
-                  │     Chunker     │
-                  └────────┬────────┘
-                           │
-                           ▼
-                  ┌─────────────────┐
-                  │   Embeddings    │
-                  │ MiniLM-L6-v2    │
-                  └────────┬────────┘
-                           │
-                           ▼
-                  ┌─────────────────┐
-                  │    ChromaDB     │
-                  │ Vector Database  │
-                  └────────┬────────┘
-                           │
-          User Question ──┘
-                 │
-                 ▼
-          Hybrid Retrieval
-          Semantic + Keyword
-                 │
-                 ▼
-          Context + Prompt
-                 │
-                 ▼
-             Groq LLM
-                 │
-                 ▼
-       Grounded Answer + Sources
+See `docs/` for the full product/tech/architecture spec this project was built from. 
 
 ## Stack
 Streamlit · PyMuPDF · python-docx · sentence-transformers (`all-MiniLM-L6-v2`) · ChromaDB · Groq (free tier, `openai/gpt-oss-120b`)
